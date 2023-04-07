@@ -1,2 +1,60 @@
-git clone https://github.com/[7Bread7]/[AAI].git
-python -m venv env
+# Import necessary libraries
+import tensorflow as tf
+from tensorflow.keras import layers
+import numpy as np
+import os
+import time
+
+# Load artwork dataset
+artwork_dir = "/path/to/artwork/directory"
+artwork_paths = [os.path.join(artwork_dir, f) for f in os.listdir(artwork_dir)]
+artwork_dataset = tf.data.Dataset.list_files(artwork_paths)
+artwork_dataset = artwork_dataset.map(parse_image)
+
+# Define preprocessing function
+def parse_image(filename):
+    image_string = tf.io.read_file(filename)
+    image = tf.image.decode_jpeg(image_string, channels=3)
+    image = tf.image.resize(image, [256, 256])
+    image = tf.cast(image, tf.float32) / 127.5 - 1
+    return image
+
+# Split dataset into training and validation sets
+BUFFER_SIZE = 1000
+BATCH_SIZE = 32
+artwork_dataset = artwork_dataset.shuffle(BUFFER_SIZE)
+artwork_dataset = artwork_dataset.batch(BATCH_SIZE)
+
+# Define GAN architecture
+def make_generator_model():
+    model = tf.keras.Sequential()
+    model.add(layers.Dense(7*7*256, use_bias=False, input_shape=(100,)))
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
+
+    model.add(layers.Reshape((7, 7, 256)))
+    assert model.output_shape == (None, 7, 7, 256) # Note: None is the batch size
+
+    model.add(layers.Conv2DTranspose(128, (5, 5), strides=(1, 1), padding='same', use_bias=False))
+    assert model.output_shape == (None, 7, 7, 128)
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
+
+    model.add(layers.Conv2DTranspose(64, (5, 5), strides=(2, 2), padding='same', use_bias=False))
+    assert model.output_shape == (None, 14, 14, 64)
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
+
+    model.add(layers.Conv2DTranspose(1, (5, 5), strides=(2, 2), padding='same', use_bias=False, activation='tanh'))
+    assert model.output_shape == (None, 28, 28, 1)
+
+    return model
+
+def make_discriminator_model():
+    model = tf.keras.Sequential()
+    model.add(layers.Conv2D(64, (5, 5), strides=(2, 2), padding='same',
+                                     input_shape=[28, 28, 1]))
+    model.add(layers.LeakyReLU())
+    model.add(layers.Dropout(0.3))
+
+    model.add(layers.Conv2
